@@ -1034,7 +1034,7 @@
 
 <script>
 /* ============================================================
-   SKY RUNNER — MULTIPLAYER (v12.4 COMPACT)
+   SKY RUNNER — MULTIPLAYER (v12.5 START FIX)
    ============================================================ */
 
 const SERVER_URL = 'https://sky-runner-server.onrender.com';
@@ -2737,6 +2737,22 @@ function connectSocket() {
     mp.socket.on('chatMessage', ({ nick, msg }) => {
       addChatMessage(nick, msg);
     });
+
+    // ХОСТ НАЧАЛ ИГРУ
+    mp.socket.on('gameStarted', (data) => {
+      console.log('[MP] Хост начал игру — стартуем у всех!');
+      if (!mp.active) {
+        startMultiplayerGame(false);
+      }
+    });
+
+    // ВОЗВРАТ В ЛОББИ
+    mp.socket.on('backToLobby', (data) => {
+      console.log('[MP] Возврат в лобби');
+      if (mp.active) {
+        returnToMenu();
+      }
+    });
   } catch (e) {
     console.error('[MP] Socket init error:', e);
     setConnStatus('offline', 'ОШИБКА');
@@ -2807,7 +2823,7 @@ document.getElementById('mpLeaveBtn').addEventListener('click', () => {
 });
 
 document.getElementById('mpStartBtn').addEventListener('click', () => {
-  startMultiplayerGame();
+  startMultiplayerGame(true);
 });
 
 document.getElementById('mpChatSend').addEventListener('click', sendChat);
@@ -2887,7 +2903,11 @@ function cleanupRemoteMeshes() {
   });
 }
 
-function startMultiplayerGame() {
+function startMultiplayerGame(sendToServer) {
+  // Если хост нажал кнопку — отправляем серверу (только 1 раз)
+  if (sendToServer && mp.socket && mp.isHost) {
+    mp.socket.emit('startGame');
+  }
   mp.active = true;
   mp.respawnTimer = 0;
 
