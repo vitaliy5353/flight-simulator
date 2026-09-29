@@ -667,7 +667,6 @@
     color: #001a22; font-weight: bold; cursor: pointer;
     font-family: inherit; font-size: 12px; }
 
-  /* Respawn-оверлей */
   #respawnScreen { position: fixed; inset: 0; z-index: 250;
     background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
     display: none; align-items: center; justify-content: center;
@@ -704,14 +703,13 @@
 <div id="loadingScreen">
   <h1>ЗАГРУЗКА МОДЕЛЕЙ</h1>
   <div class="loading-bar"><div class="loading-bar-fill" id="loadingFill"></div></div>
-  <div id="loadingText">Проверка папки models/...</div>
+  <div id="loadingText">Загрузка моделей...</div>
   <div id="modelStatus">
-    <div>🎮 player.glb: <span id="statusPlayer">проверка...</span></div>
-    <div>🔴 enemy.glb: <span id="statusEnemy">проверка...</span></div>
-    <div>🚢 aircraft carrier.glb: <span id="statusCarrier">проверка...</span></div>
+    <div>🎮 player.glb: <span id="statusPlayer">загрузка...</span></div>
+    <div>🔴 enemy.glb: <span id="statusEnemy">загрузка...</span></div>
+    <div>🚢 aircraft carrier.glb: <span id="statusCarrier">загрузка...</span></div>
   </div>
   <div id="debugLog"></div>
-  <button class="btn-retry hidden" id="btnRetry">ПРОДОЛЖИТЬ БЕЗ МОДЕЛЕЙ</button>
 </div>
 
 <div id="rotateOverlay">
@@ -863,7 +861,6 @@
   </div>
 </div>
 
-<!-- Respawn-оверлей -->
 <div id="respawnScreen">
   <h2>СБИТ</h2>
   <div class="timer" id="respawnTimer">3</div>
@@ -882,7 +879,7 @@
   <div class="top-bar">
     <div>
       <span class="logo-mini">SKY RUNNER DOGFIGHT</span>
-      <span class="version-tag">v12.0 MULTIPLAYER</span>
+      <span class="version-tag">v12.1 MULTIPLAYER</span>
     </div>
   </div>
 
@@ -1032,17 +1029,10 @@
 
 <script>
 /* ============================================================
-   SKY RUNNER 3D — MULTIPLAYER (v12.0)
-   
-   ✅ Одиночный режим (боты)
-   ✅ Мультиплеер через Socket.io
-   ✅ До 4 игроков в комнате
-   ✅ Ники, чат, kill feed
-   ✅ Respawn через 3 секунды
+   SKY RUNNER 3D — MULTIPLAYER (v12.1)
    ============================================================ */
 
 const SERVER_URL = 'https://sky-runner-server.onrender.com';
-
 const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
 const debugLog = document.getElementById('debugLog');
@@ -1195,13 +1185,6 @@ function initLoader() {
   return false;
 }
 
-async function checkFile(url) {
-  try {
-    const r = await fetch(url, { method: 'HEAD' });
-    return r.ok;
-  } catch (e) { return false; }
-}
-
 function loadModel(url, key, statusId) {
   return new Promise((resolve) => {
     if (!gltfLoader) { resolve(null); return; }
@@ -1243,13 +1226,7 @@ function setLoadingProgress(pct, text) {
 
 async function preloadAllModels() {
   log('=== СТАРТ ===');
-  setLoadingProgress(5, 'Проверка models/...');
-  const modelsOK = await checkFile('models/');
-  if (!modelsOK) {
-    log('❌ models/ недоступна', 'error');
-    document.getElementById('btnRetry').classList.remove('hidden');
-    return;
-  }
+  setLoadingProgress(5, 'Загрузка моделей...');
   const files = [
     { url: 'models/player.glb', key: 'player', status: 'statusPlayer' },
     { url: 'models/enemy.glb', key: 'enemy', status: 'statusEnemy' },
@@ -1266,18 +1243,10 @@ async function preloadAllModels() {
   setLoadingProgress(100, 'Готово!');
   const loaded = [modelCache.playerOK, modelCache.enemyOK, modelCache.carrierOK].filter(x => x).length;
   log(`=== Загружено ${loaded}/3 ===`, loaded > 0 ? 'success' : 'warn');
-  if (loaded === 0) {
-    document.getElementById('btnRetry').classList.remove('hidden');
-  } else {
-    setTimeout(() => {
-      document.getElementById('loadingScreen').classList.add('hidden');
-    }, 800);
-  }
+  setTimeout(() => {
+    document.getElementById('loadingScreen').classList.add('hidden');
+  }, 800);
 }
-
-document.getElementById('btnRetry').addEventListener('click', () => {
-  document.getElementById('loadingScreen').classList.add('hidden');
-});
 
 // ============================================================
 //   АВТОПРИЦЕЛ
@@ -1724,20 +1693,19 @@ let invulnTimer = 0, warningTimer = 0;
 let aimAssistTarget = null;
 let enemySoundCooldown = 0;
 
-// Мультиплеер
 const mp = {
   connected: false,
   socket: null,
   nick: '',
   roomCode: null,
-  players: new Map(),  // id -> { nick, x,y,z, yaw,pitch,roll, hp, alive, mesh, nametag, score, kills }
+  players: new Map(),
   myId: null,
   isHost: false,
   active: false,
   respawnTimer: 0,
   lastSendTime: 0,
 };
-const SEND_RATE = 1 / 20; // 20 раз в секунду
+const SEND_RATE = 1 / 20;
 
 function findBestAimTarget() {
   const assist = getAimAssist();
@@ -2073,8 +2041,6 @@ function updateBullets(dt) {
     if (b.life <= 0) { scene.remove(b.mesh); activeBullets.splice(i, 1); continue; }
 
     if (b.owner === 'local') {
-      // Local bullets can hit bots OR remote players
-      let hit = false;
       if (!mp.active) {
         for (const bot of activeBots) {
           if (!bot.alive) continue;
@@ -2084,7 +2050,6 @@ function updateBullets(dt) {
             b.life = 0;
             showHitMarker();
             if (bot.hp <= 0) killBot(bot, true);
-            hit = true;
             break;
           }
         }
@@ -2095,9 +2060,7 @@ function updateBullets(dt) {
           if (d < settings.modelSize * 0.5 + 2) {
             b.life = 0;
             showHitMarker();
-            // Send hit to server
             if (mp.socket) mp.socket.emit('hitPlayer', { targetId: p.id, damage: b.damage });
-            hit = true;
             break;
           }
         }
@@ -2109,12 +2072,9 @@ function updateBullets(dt) {
         if (invulnTimer <= 0) applyDamageToPlayer(b.damage);
       }
     } else if (b.owner === 'remote') {
-      // Remote player bullets — can hit me
       const d = Math.hypot(b.x - ship.pos.x, b.y - ship.pos.y, b.z - ship.pos.z);
       if (d < CONFIG.hitRadius + 2) {
         b.life = 0;
-        // We do NOT send damage — the shooter's server already registered it
-        // Just visual
       }
     }
   }
@@ -2165,8 +2125,6 @@ function tryShoot() {
   const startZ = ship.pos.z + dz * 8;
   spawnBullet(startX, startY, startZ, dx, dy, dz, 'local', CONFIG.bulletDamage);
   flashScreen('rgba(255,200,80,0.1)');
-  // 🔊 Sound disabled — add your own later
-  // playSound('shoot', 0.4);
 
   if (mp.active && mp.socket) {
     mp.socket.emit('shoot', { x: startX, y: startY, z: startZ, dx, dy, dz });
@@ -2252,7 +2210,6 @@ function updateShip(dt) {
   updateCompass();
   updateRollIndicator();
 
-  // Send position to server
   if (mp.active && mp.socket && mp.connected) {
     mp.lastSendTime += dt;
     if (mp.lastSendTime >= SEND_RATE) {
@@ -2400,7 +2357,6 @@ function drawMinimap() {
     mmCtx.arc(cx + dx * scale, cy + dz * scale, 6, 0, Math.PI * 2);
     mmCtx.fill();
   });
-  // Enemies (bots or remote players)
   if (mp.active) {
     mp.players.forEach(p => {
       if (p.id === mp.myId || !p.alive) return;
@@ -2553,21 +2509,18 @@ function animate(now) {
 }
 
 // ============================================================
-//   МУЛЬТИПЛЕЕР ЛОГИКА
+//   МУЛЬТИПЛЕЕР
 // ============================================================
 
 function updateRemotePlayers(dt) {
-  const now = performance.now();
   mp.players.forEach(p => {
     if (p.id === mp.myId) return;
     if (!p.mesh) return;
-    // Плавная интерполяция
     if (p.targetX !== undefined) {
       const lerp = 1 - Math.pow(0.001, dt);
       p.mesh.position.x += (p.targetX - p.mesh.position.x) * lerp;
       p.mesh.position.y += (p.targetY - p.mesh.position.y) * lerp;
       p.mesh.position.z += (p.targetZ - p.mesh.position.z) * lerp;
-      // Плавный поворот
       let dyaw = p.targetYaw - p.currentYaw;
       while (dyaw > Math.PI) dyaw -= Math.PI * 2;
       while (dyaw < -Math.PI) dyaw += Math.PI * 2;
@@ -2576,7 +2529,6 @@ function updateRemotePlayers(dt) {
       p.mesh.rotation.set(p.targetPitch, -p.currentYaw, 0);
     }
     p.mesh.visible = p.alive;
-    // Nametag
     if (p.nametag) {
       if (p.alive) {
         const sp = worldToScreen(p.mesh.position.x, p.mesh.position.y + settings.modelSize, p.mesh.position.z);
@@ -2614,7 +2566,6 @@ function playerDied() {
   mp.respawnTimer = 3.0;
   document.getElementById('respawnScreen').classList.add('show');
   document.getElementById('respawnTimer').textContent = '3';
-  // Hide own plane
   playerPlane.visible = false;
 }
 
@@ -2650,7 +2601,6 @@ const mpWaiting = document.getElementById('mpWaiting');
 const mpChatLog = document.getElementById('mpChatLog');
 const mpChatInput = document.getElementById('mpChatInput');
 
-// Load saved nick
 try {
   const savedNick = localStorage.getItem('skyRunner_nick');
   if (savedNick) mpNickInput.value = savedNick;
@@ -2707,14 +2657,12 @@ function connectSocket() {
     mp.socket.on('disconnect', () => {
       mp.connected = false;
       setConnStatus('offline', 'ОТКЛЮЧЕНО');
-      console.log('[MP] Disconnected');
     });
     mp.socket.on('connect_error', (err) => {
       setConnStatus('offline', 'ОШИБКА СВЯЗИ');
       console.error('[MP] Connect error:', err.message);
     });
 
-    // ---- Lobby events ----
     mp.socket.on('playerJoined', (player) => {
       addPlayerToLobby(player);
     });
@@ -2728,7 +2676,6 @@ function connectSocket() {
       updateLobbyUI();
     });
 
-    // ---- Game events ----
     mp.socket.on('playerUpdate', (data) => {
       const p = mp.players.get(data.id);
       if (!p) return;
@@ -2755,7 +2702,6 @@ function connectSocket() {
         showScorePopup('+200', '#ff6644');
       }
       if (victimId === mp.myId) {
-        // We died — server told us
         if (mp.respawnTimer <= 0) playerDied();
       }
       const v = mp.players.get(victimId);
@@ -2809,7 +2755,6 @@ function addChatMessage(nick, msg) {
   while (mpChatLog.children.length > 50) mpChatLog.removeChild(mpChatLog.firstChild);
 }
 
-// ---- Create room ----
 document.getElementById('mpCreateBtn').addEventListener('click', () => {
   const nick = mpNickInput.value.trim();
   if (nick.length < 2) return showMpError('Ник должен быть 2-16 символов');
@@ -2826,7 +2771,6 @@ document.getElementById('mpCreateBtn').addEventListener('click', () => {
   });
 });
 
-// ---- Join room ----
 document.getElementById('mpJoinBtn').addEventListener('click', () => {
   const nick = mpNickInput.value.trim();
   const code = mpCodeInput.value.trim().toUpperCase();
@@ -2871,7 +2815,7 @@ function sendChat() {
   const msg = mpChatInput.value.trim();
   if (!msg || !mp.socket) return;
   mp.socket.emit('chat', msg);
-  addChatMessage(mp.nick, msg); // Own message
+  addChatMessage(mp.nick, msg);
   mpChatInput.value = '';
 }
 
@@ -2883,7 +2827,6 @@ function showLobby() {
 }
 
 function updateLobbyUI() {
-  // Players list
   mpPlayersTitle.textContent = `👥 ИГРОКИ (${mp.players.size}/4)`;
   const rows = [];
   let count = 0;
@@ -2905,7 +2848,6 @@ function updateLobbyUI() {
   }
   mpPlayerList.innerHTML = rows.join('');
 
-  // Show/hide start button
   if (mp.isHost) {
     mpStartBtn.style.display = 'block';
     mpWaiting.style.display = 'none';
@@ -2942,14 +2884,10 @@ function cleanupRemoteMeshes() {
   });
 }
 
-// ============================================================
-//   СТАРТ МУЛЬТИПЛЕЕРНОГО МАТЧА
-// ============================================================
 function startMultiplayerGame() {
   mp.active = true;
   mp.respawnTimer = 0;
 
-  // Close lobby and screens
   closeMpScreen();
   document.getElementById('mainMenu').classList.add('hidden');
   document.getElementById('gameOverScreen').classList.add('hidden');
@@ -2957,7 +2895,6 @@ function startMultiplayerGame() {
   document.getElementById('btnMute').classList.remove('hidden');
   document.getElementById('respawnScreen').classList.remove('show');
 
-  // Reset game state
   game.state = 'playing';
   game.score = 0;
   game.kills = 0;
@@ -2971,7 +2908,6 @@ function startMultiplayerGame() {
 
   invulnTimer = 2.0;
 
-  // Clear bots & bullets
   activeBots.slice().forEach(b => {
     scene.remove(b.mesh);
     if (b.statusEl) b.statusEl.remove();
@@ -2980,7 +2916,6 @@ function startMultiplayerGame() {
   activeBullets.slice().forEach(b => scene.remove(b.mesh));
   activeBullets.length = 0;
 
-  // Spawn meshes for all remote players
   mp.players.forEach(p => {
     if (p.id === mp.myId) return;
     const mesh = createRemotePlayerModel(p.nick);
@@ -2995,7 +2930,6 @@ function startMultiplayerGame() {
     p.targetPitch = p.pitch || 0;
     p.alive = p.alive !== false;
 
-    // Nametag
     const tag = document.createElement('div');
     tag.className = 'player-nametag enemy';
     tag.textContent = p.nick;
@@ -3003,7 +2937,6 @@ function startMultiplayerGame() {
     p.nametag = tag;
   });
 
-  // Show touch controls if mobile
   if (isMobile || window.innerWidth < 1100) {
     document.getElementById('touchControls').style.display = 'grid';
     document.getElementById('yawControls').style.display = 'flex';
@@ -3017,9 +2950,6 @@ function startMultiplayerGame() {
   addChatMessage('system', 'Бой начался!');
 }
 
-// ============================================================
-//   ОДИНОЧНАЯ ИГРА
-// ============================================================
 function startGame() {
   mp.active = false;
   mp.respawnTimer = 0;
@@ -3084,7 +3014,6 @@ function gameOver() {
 }
 
 function returnToMenu() {
-  // If in multiplayer — leave room
   if (mp.active) {
     if (mp.socket) mp.socket.emit('leaveRoom');
     cleanupRemoteMeshes();
@@ -3120,8 +3049,7 @@ document.getElementById('toMenuBtn').addEventListener('click', returnToMenu);
 document.getElementById('pauseResume').addEventListener('click', togglePause);
 document.getElementById('pauseQuit').addEventListener('click', () => {
   document.getElementById('pauseScreen').classList.remove('show');
-  if (mp.active) returnToMenu();
-  else returnToMenu();
+  returnToMenu();
 });
 
 document.getElementById('btnSettings').addEventListener('click', () => {
@@ -3250,7 +3178,6 @@ async function boot() {
   await initSounds();
   if (!initLoader()) {
     log('Fallback режим', 'warn');
-    document.getElementById('btnRetry').classList.remove('hidden');
     return;
   }
   await preloadAllModels();
